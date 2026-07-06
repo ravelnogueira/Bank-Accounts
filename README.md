@@ -26,31 +26,37 @@ No integration-test project is included by design.
 
 ## Run locally
 
+The Docker Compose and Development settings use local-only credentials to make the technical test easy to run. Do not reuse these values in production.
+
 Start PostgreSQL, Redis, and RabbitMQ:
 
-```bash
-cp .env.example .env
+```powershell
 docker compose up -d
 ```
 
-Fill `.env` with local development credentials before starting Docker Compose. The `.env` file is ignored by Git and must not be committed.
+The local ports are:
+
+```text
+PostgreSQL  localhost:5432
+Redis       localhost:6380
+RabbitMQ    localhost:5672
+RabbitMQ UI http://localhost:15672
+```
+
+Local credentials:
+
+```text
+PostgreSQL database: bank_accounts
+PostgreSQL user:     postgres
+PostgreSQL password: postgres
+RabbitMQ user:       guest
+RabbitMQ password:   guest
+```
 
 Restore packages and apply the database migration:
 
 ```powershell
 dotnet restore
-
-Get-Content .env | ForEach-Object {
-  if ($_ -and -not $_.StartsWith("#")) {
-    $name, $value = $_.Split("=", 2)
-    [Environment]::SetEnvironmentVariable($name, $value, "Process")
-  }
-}
-
-$env:ConnectionStrings__PostgreSql = "Host=localhost;Port=5432;Database=$env:POSTGRES_DB;Username=$env:POSTGRES_USER;Password=$env:POSTGRES_PASSWORD"
-$env:ConnectionStrings__Redis = "localhost:6380"
-$env:RabbitMq__UserName = $env:RABBITMQ_USER
-$env:RabbitMq__Password = $env:RABBITMQ_PASSWORD
 dotnet ef database update `
   --project src/Bank.Accounts.Infrastructure `
   --startup-project src/Bank.Accounts.Api
@@ -62,9 +68,14 @@ Run the API:
 dotnet run --project src/Bank.Accounts.Api
 ```
 
-Run the API from the same terminal where the environment variables were loaded, or configure equivalent values with user-secrets or your operating system environment.
+In Development, Swagger is available at `/swagger`. RabbitMQ management is available at `http://localhost:15672`.
 
-In Development, Swagger is available at `/swagger`. RabbitMQ management is available at `http://localhost:15672` with the credentials configured in `.env`.
+If PostgreSQL was already created with different local credentials, recreate the containers and volume:
+
+```powershell
+docker compose down -v
+docker compose up -d
+```
 
 Run unit tests:
 
@@ -109,7 +120,7 @@ The API is a producer. It declares and publishes to the `bank.accounts` topic ex
 For local testing, create a demo queue bound to all account events:
 
 ```powershell
-$auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:RABBITMQ_USER`:$env:RABBITMQ_PASSWORD"))
+$auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("guest:guest"))
 $headers = @{ Authorization = "Basic $auth" }
 
 Invoke-RestMethod `
